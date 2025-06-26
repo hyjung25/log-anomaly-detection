@@ -8,20 +8,30 @@ Please use your own log data or synthetic examples for testing and validation.
 
 ## Project Structure
 log-anomaly-detection/
+
 ├── notebooks/
+
 │   ├── 01_preprocessing.ipynb       
 │   ├── 02_train_deeplog.ipynb      
 │   ├── 03_train_logbert.ipynb        
 │   ├── 04_ensemble.ipynb            
+
 ├── models/
+
 │   └── logbert_with_severity.py      
+
 ├── utils/
+
 │   └── thresholding.py               
+
 ├── data/                           
 ├── results/                        
 ├── requirements.txt
+
 ├── environment.yml
+
 ├── README.md
+
 └── .gitignore
 
 ## Overview
