@@ -6,7 +6,7 @@ It includes the implementation and integration of **DeepLog**, **LogBERT**, and 
 **Note**: This repository does **not** include the original log data used in experiments due to company policy.  
 Please use your own log data or synthetic examples for testing and validation.
 
-## 📁 Project Structure
+## Project Structure
 log-anomaly-detection/
 ├── models/ # DeepLog, LogBERT, and Ensemble implementations
 ├── preprocessing/ # Drain3-based parsing
@@ -26,7 +26,7 @@ log-anomaly-detection/
   - `LogBERTWithSeverity`: Enhanced with severity embedding
   - `Ensemble`: Final detection using logic-based AND/OR combination
 
-## 🧠 Methodology
+## Methodology
 ### Step 1. DeepLog
 - LSTM model trained directly on parsed logs
 - Result: High false positive rate → insufficient semantic understanding
