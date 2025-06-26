@@ -8,19 +8,21 @@ Please use your own log data or synthetic examples for testing and validation.
 
 ## Project Structure
 log-anomaly-detection/
-├── main.py               
-├── preprocess.py         
-├── train_deeplog.py      
-├── train_logbert.py      
-├── ensemble.py           
-├── models/               
-│   └── logbert_with_severity.py
-├── results/             
-│   └── danger_logs.csv
-├── requirements.txt      
-├── environment.yml        
-├── README.md             
-└── .gitignore            
+├── notebooks/
+│   ├── 01_preprocessing.ipynb       
+│   ├── 02_train_deeplog.ipynb      
+│   ├── 03_train_logbert.ipynb        
+│   ├── 04_ensemble.ipynb            
+├── models/
+│   └── logbert_with_severity.py      
+├── utils/
+│   └── thresholding.py               
+├── data/                           
+├── results/                        
+├── requirements.txt
+├── environment.yml
+├── README.md
+└── .gitignore
 
 ## Overview
 - **Data**: 97,000 logs parsed via [Drain3](https://github.com/logpai/Drain3)
