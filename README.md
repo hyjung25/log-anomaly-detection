@@ -8,14 +8,19 @@ Please use your own log data or synthetic examples for testing and validation.
 
 ## Project Structure
 log-anomaly-detection/
-├── models/ # DeepLog, LogBERT, and Ensemble implementations
-├── preprocessing/ # Drain3-based parsing
-├── notebooks/ # Experiment tracking and visualization
-├── results/ # Final output logs, thresholds, and plots
-├── utils/ # Helper functions (thresholding, voting)
-├── data/ # (Ignored) Company logs not included
-├── LICENSE
-└── README.md
+├── main.py               
+├── preprocess.py         
+├── train_deeplog.py      
+├── train_logbert.py      
+├── ensemble.py           
+├── models/               
+│   └── logbert_with_severity.py
+├── results/             
+│   └── danger_logs.csv
+├── requirements.txt      
+├── environment.yml        
+├── README.md             
+└── .gitignore            
 
 ## Overview
 - **Data**: 97,000 logs parsed via [Drain3](https://github.com/logpai/Drain3)
