@@ -38,6 +38,7 @@ import csv
 from datetime import datetime
 
 input_file = "raw_data/HDFS_100k.log"
+output_file = "raw_data/log.csv"
 
 def parse_line(line):
     try:

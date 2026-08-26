@@ -75,6 +75,7 @@ df["EventId"] = event_ids
 df["Template"] = templates
 
 df.to_csv(output_path, index=False)
+df_train = df
 
 json_ready_dict = {k: list(v) for k, v in event_param_dict.items()}
 with open("event_params.json", "w") as f:
