@@ -1,3 +1,9 @@
+# Converted from hyjung25/log-anomaly-detection1: DeepLog + LogBERT.ipynb
+# Notebook-to-Python migration pass; original experiment logic intentionally preserved.
+
+# %% [notebook cell 1]
+# Import
+
 import os
 import re
 import ast
@@ -16,36 +22,43 @@ import matplotlib.pyplot as plt
 from datasets import Dataset
 from transformers import BertTokenizer, BertForMaskedLM, Trainer, TrainingArguments, DataCollatorForLanguageModeling, EarlyStoppingCallback
 from sklearn.decomposition import PCA
+from drain3.file_persistence import FilePersistence
+from drain3.template_miner import TemplateMiner
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
 from sklearn.metrics import accuracy_score, recall_score, f1_score, precision_recall_curve, classification_report, precision_score, confusion_matrix, ConfusionMatrixDisplay
 
-
+# %% [notebook cell 2]
 df = pd.read_csv("Data/log_labeled.csv")
 df_test = pd.read_csv("Data/log_labeled_test.csv")
 
-
+# %% [notebook cell 3]
 def normalize_log(text):
-    text = re.sub(r'\b\d{6,}\b', '<LONGNUM>', text)
-    text = re.sub(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', '<IP>', text)
-    text = re.sub(r':\d{2,5}\b', ':<PORT>', text)
+    # 진짜 의미 없는 숫자/시간/IP만 정규화
+    text = re.sub(r'\b\d{6,}\b', '<LONGNUM>', text)  # 6자리 이상 숫자만
+    text = re.sub(r'\b\d{1,3}(?:\.\d{1,3}){3}\b', '<IP>', text)  # IP
+    text = re.sub(r':\d{2,5}\b', ':<PORT>', text)  # port
     return text.strip()
-
 
 train_size = int(0.8 * len(df))
 val_size = len(df) - train_size
 
-train_data = df[:train_size]['Message'].tolist()
-val_data = df[train_size:train_size + val_size]['Message'].tolist()
-test_data = df_test['Message'].tolist()
+train_data = df[:train_size]
+train_data = train_data['Message'].tolist()
+
+val_data = df[train_size:train_size+val_size]
+val_data = val_data['Message'].tolist()
+
+test_data = df_test
+test_data = test_data['Message'].tolist()
 test_labels = df_test['Label'].tolist()
 
 label_map = {"Normal": 0, "Anomaly": 1}
 y_true = [label_map[label] for label in test_labels]
 
 train_data = [normalize_log(text) for text in train_data]
-val_data = [normalize_log(text) for text in val_data]
-test_data = [normalize_log(text) for text in test_data]
+val_data   = [normalize_log(text) for text in val_data]
+test_data  = [normalize_log(text) for text in test_data]
 
 train_dataset = Dataset.from_dict({"text": train_data})
 val_dataset = Dataset.from_dict({"text": val_data})
@@ -53,10 +66,8 @@ test_dataset = Dataset.from_dict({"text": test_data})
 
 tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-
 def tokenize_function(examples):
     return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=128)
-
 
 tokenized_train = train_dataset.map(tokenize_function, batched=True)
 tokenized_val = val_dataset.map(tokenize_function, batched=True)
@@ -65,7 +76,7 @@ tokenized_test = test_dataset.map(tokenize_function, batched=True)
 data_collator = DataCollatorForLanguageModeling(
     tokenizer=tokenizer,
     mlm=True,
-    mlm_probability=0.15,
+    mlm_probability=0.15
 )
 
 model_path = "models/logbert_mlm_2"
@@ -76,11 +87,12 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 model.eval()
 
+# 2. 임베딩 로드
 train_embeddings = np.load("train_embeddings_2.npy")
 test_embeddings = np.load("test_embeddings_2.npy")
 
-
 def evaluate(y_true, y_pred):
+
     print("Classification Report")
     print(classification_report(y_true, y_pred, digits=5))
 
@@ -94,7 +106,7 @@ def evaluate(y_true, y_pred):
     print(f"Precision: {prec:.5f}")
     print(f"Recall:    {rec:.5f}")
     print(f"F1 Score:  {f1:.5f}")
-    print("Confusion Matrix:")
+    print("✅ Confusion Matrix:")
     print(cm)
 
     return {
@@ -102,50 +114,49 @@ def evaluate(y_true, y_pred):
         'precision': prec,
         'recall': rec,
         'f1': f1,
-        'confusion_matrix': cm,
+        'confusion_matrix': cm
     }
 
-
+# %% [notebook cell 4]
 scaler = StandardScaler()
-X_scaled = scaler.fit_transform(test_embeddings)
+X_scaled = scaler.fit_transform(test_embeddings)  # test_embeddings는 (N, D) numpy 배열
 
-pca = PCA(n_components=50)
+pca = PCA(n_components=50)  # 혹은 n_components='mle'로 자동 선택도 가능
 X_pca = pca.fit_transform(X_scaled)
 
-clusterer = hdbscan.HDBSCAN(
-    min_cluster_size=300,
-    min_samples=300 // 2,
-    prediction_data=True,
-)
+clusterer = hdbscan.HDBSCAN(min_cluster_size=300, min_samples=300 // 2, prediction_data=True)
 cluster_labels = clusterer.fit_predict(X_pca)
+
+# 이상치는 -1로 표시됨
 y_pred = (cluster_labels == -1).astype(int)
 
-
+# %% [notebook cell 5]
 def add_logbert_detection_column(df, y_pred, column_name="LogBERT Results"):
-    assert len(df) == len(y_pred), "DataFrame and prediction lengths do not match"
+    assert len(df) == len(y_pred), "데이터프레임과 예측 결과 길이 불일치"
+
     mapped = ["Normal" if pred == 0 else "Anomaly" for pred in y_pred]
     df[column_name] = mapped
     return df
 
-
 df_with_logbert = add_logbert_detection_column(df_test, y_pred)
 
-
+# %% [notebook cell 18]
 test_input_path = "Data/log_labeled_test.csv"
 test_output_path = "Data/log_parsed_test.csv"
 event_param_path = "Data/event_params_test.json"
 state_path = "drain3_state_test.bin"
 
-
+# 파라미터 추출 함수
 def extract_parameter(msg):
     match = re.search(r"(blk_[\-]?\d+)", msg)
     return match.group(1) if match else None
 
-
+# Drain3 기반 로그 파서
 def parse_logs_with_drain3(input_path, event_param_path=None, state_path="drain3_state.bin"):
     persistence = FilePersistence(state_path)
     template_miner = TemplateMiner(persistence)
 
+    # Drain3 튜닝
     template_miner.drain.similarity_threshold = 0.4
     template_miner.drain.depth = 5
     template_miner.drain.extra_delimiters = "=():[]<>"
@@ -185,7 +196,7 @@ def parse_logs_with_drain3(input_path, event_param_path=None, state_path="drain3
 
     return df
 
-
+# 시퀀스 생성 함수
 def make_sequences(df, window_size=20):
     sequences = []
     event_ids = df['EventId'].tolist()
@@ -195,13 +206,16 @@ def make_sequences(df, window_size=20):
         sequences.append((seq, target))
     return sequences
 
+# === 실행 ===
 
+# 로그 파싱 + 파라미터 추출
 df_test = parse_logs_with_drain3(
     input_path="Data/log_labeled_test.csv",
     event_param_path="Data/event_params_test.json",
-    state_path="drain3_state_test.bin",
+    state_path="drain3_state_test.bin"
 )
 
+# 시퀀스 생성 및 인코딩
 test_sequences = make_sequences(df_test)
 X_test = [s[0] for s in test_sequences]
 y_test = [s[1] for s in test_sequences]
@@ -209,15 +223,16 @@ y_test = [s[1] for s in test_sequences]
 with open("models/event2id.json") as f:
     event2id = json.load(f)
 
+# 이벤트 인코딩
 X_test_encoded = [[event2id.get(e, -1) for e in seq] for seq in X_test]
 y_test_encoded = [event2id.get(e, -1) for e in y_test]
 num_classes = len(event2id)
 
+# %% [notebook cell 19]
 window_size = len(X_test[0])
 top_k = 5
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 y_label = df_test["Label"].tolist()
-
 
 class DeepLogLSTM(nn.Module):
     def __init__(self, num_classes, embedding_dim=128, hidden_size=256, num_layers=2):
@@ -232,12 +247,11 @@ class DeepLogLSTM(nn.Module):
         out = out[:, -1, :]
         return self.fc(out)
 
-
 deeplog_model = DeepLogLSTM(num_classes=num_classes).to(device)
 deeplog_model.load_state_dict(torch.load("models/deeplog_after_selftraining.pt", map_location=device))
 deeplog_model.eval()
 
-
+# %% [notebook cell 20]
 def is_param_abnormal_weak(event_id, param, event_param_dict, top_n=3, min_param_count=5):
     if event_id not in event_param_dict:
         return False
@@ -246,7 +260,6 @@ def is_param_abnormal_weak(event_id, param, event_param_dict, top_n=3, min_param
         return False
     most_common_params = [p for p, _ in Counter(values).most_common(top_n)]
     return param not in most_common_params
-
 
 def attach_deeplog_prediction_column_with_weakparam(model, df_test, X_test, y_test, y_label,
                                                     event_param_dict, top_k=5,
@@ -286,7 +299,7 @@ def attach_deeplog_prediction_column_with_weakparam(model, df_test, X_test, y_te
     df_test["DeepLog_Prediction"] = [None] * window_size + preds
     return df_test
 
-
+# %% [notebook cell 21]
 with open("event_params.json", "r") as f:
     event_param_dict = json.load(f)
 
@@ -299,25 +312,27 @@ df_test = attach_deeplog_prediction_column_with_weakparam(
     event_param_dict=event_param_dict,
     top_k=5,
     top_n=10,
-    min_param_count=400,
+    min_param_count=400
 )
 
-
+# %% [notebook cell 23]
 def merge_deeplog_logbert_results(df_test, df_with_logbert,
                                   deeplog_col="DeepLog_Prediction",
                                   logbert_col="LogBERT Results"):
+    # 공통 컬럼: Message, DeepLog_Prediction, LogBERT_Prediction
     df_merged = pd.DataFrame({
         "Message": df_test["Message"],
         "DeepLog Results": df_test[deeplog_col],
         "LogBERT Results": df_with_logbert[logbert_col],
-        "Label": df_test["Label"],
+        "Label": df_test["Label"]
     })
+
     return df_merged
 
-
+# %% [notebook cell 24]
 df_combined = merge_deeplog_logbert_results(df_test, df_with_logbert)
 
-
+# %% [notebook cell 25]
 def assign_ensemble_status(df):
     status = []
 
@@ -332,12 +347,13 @@ def assign_ensemble_status(df):
     df["Ensemble_Status"] = status
     return df
 
-
+# %% [notebook cell 26]
 df_combined = assign_ensemble_status(df_combined)
 
-
+# %% [notebook cell 29]
 def evaluate_predictions(df, label_col="Label"):
     label_map = {"Normal": 0, "Anomaly": 1}
+
     y_true = df[label_col].map(label_map)
 
     evaluations = {
@@ -347,24 +363,30 @@ def evaluate_predictions(df, label_col="Label"):
     }
 
     for col, meta in evaluations.items():
-        print(f"\nClassification Report ({col}):")
+        print(f"\n📊 Classification Report ({col}):")
+
+        # mapping 후 NaN 제거
         y_pred = df[col].map(meta["mapping"])
         valid_idx = y_pred.notna()
         y_pred_clean = y_pred[valid_idx].astype(int)
         y_true_clean = y_true[valid_idx].astype(int)
 
+        # 평가 지표 출력
         print(classification_report(y_true_clean, y_pred_clean, digits=4))
 
         cm = confusion_matrix(y_true_clean, y_pred_clean, labels=[0, 1])
         tn, fp, fn, tp = cm.ravel()
 
-        print(f"Accuracy:  {accuracy_score(y_true_clean, y_pred_clean):.4f}")
-        print(f"Precision: {precision_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
-        print(f"Recall:    {recall_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
-        print(f"F1 Score:  {f1_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
-        print(f"Confusion Matrix:\n[[TN={tn} FP={fp}]\n [FN={fn} TP={tp}]]")
+        print(f"✅ Accuracy:  {accuracy_score(y_true_clean, y_pred_clean):.4f}")
+        print(f"✅ Precision: {precision_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
+        print(f"✅ Recall:    {recall_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
+        print(f"✅ F1 Score:  {f1_score(y_true_clean, y_pred_clean, zero_division=0):.4f}")
+        print(f"✅ Confusion Matrix:\n[[TN={tn} FP={fp}]\n [FN={fn} TP={tp}]]")
 
+# %% [notebook cell 30]
+evaluate_predictions(df_combined)
 
+# %% [notebook cell 31]
 def make_ensemble_status_3level(df):
     def classify(row):
         deep = row['DeepLog_Status']
@@ -372,7 +394,7 @@ def make_ensemble_status_3level(df):
 
         if deep == "Danger" and logbert == "Danger":
             return "Danger"
-        elif logbert == "Danger" and deep == "Warning":
+        elif (logbert == "Danger" and deep == "Warning"):
             return "Danger"
         elif deep in ["Danger", "Warning"] or logbert == "Warning":
             return "Warning"
